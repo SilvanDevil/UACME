@@ -4,9 +4,9 @@
 *
 *  TITLE:       GLOBAL.H
 *
-*  VERSION:     3.26
+*  VERSION:     3.27
 *
-*  DATE:        26 May 2020
+*  DATE:        10 Sep 2020
 *
 *  Common header file for the program support routines.
 *
@@ -100,6 +100,10 @@ typedef struct _UACME_CONTEXT {
     BOOLEAN                 UserRequestsAutoApprove;
     BOOL                    OutputToDebugger;
     ULONG                   Cookie;
+    ULONG                   dwBuildNumber;
+    ULONG                   AkagiFlag;
+    ULONG                   IFileOperationFlags;
+    ULONG                   OptionalParameterLength; //count of characters
     PVOID                   ucmHeap;
     pfnDecompressPayload    DecompressRoutine;
     HINSTANCE               hNtdll;
@@ -108,10 +112,6 @@ typedef struct _UACME_CONTEXT {
     HINSTANCE               hMpClient;
     UACME_SHARED_CONTEXT    SharedContext;
     UCM_METHOD_EXECUTE_TYPE MethodExecuteType;
-    ULONG                   dwBuildNumber;
-    ULONG                   AkagiFlag;
-    ULONG                   IFileOperationFlags;
-    ULONG                   OptionalParameterLength; //count of characters
     WCHAR                   szSystemRoot[MAX_PATH + 1]; //with end slash
     WCHAR                   szSystemDirectory[MAX_PATH + 1];//with end slash
     WCHAR                   szTempDirectory[MAX_PATH + 1]; //with end slash

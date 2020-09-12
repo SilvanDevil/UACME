@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     3.26
+*  VERSION:     3.27
 *
-*  DATE:        26 May 2020
+*  DATE:        10 Sep 2020
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -606,6 +606,111 @@ PBYTE supReadFileToBuffer(
 )
 {
     NTSTATUS    status;
+    HANDLE      hFile = NULL;
+    PBYTE       Buffer = NULL;
+    SIZE_T      sz = 0;
+
+    UNICODE_STRING              usName;
+    OBJECT_ATTRIBUTES           attr;
+    IO_STATUS_BLOCK             iost;
+    FILE_STANDARD_INFORMATION   fi;
+
+    do {
+
+        if (lpFileName == NULL)
+            return NULL;
+
+        if (!RtlDosPathNameToNtPathName_U(lpFileName, &usName, NULL, NULL))
+            break;
+
+        InitializeObjectAttributes(&attr, &usName, OBJ_CASE_INSENSITIVE, 0, NULL);
+
+        status = NtCreateFile(
+            &hFile,
+            FILE_READ_DATA | SYNCHRONIZE,
+            &attr,
+            &iost,
+            NULL,
+            FILE_ATTRIBUTE_NORMAL,
+            FILE_SHARE_READ,
+            FILE_OPEN,
+            FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
+            NULL,
+            0);
+
+        RtlFreeUnicodeString(&usName);
+
+        if (!NT_SUCCESS(status)) {
+            break;
+        }
+
+        RtlSecureZeroMemory(&fi, sizeof(fi));
+
+        status = NtQueryInformationFile(
+            hFile,
+            &iost,
+            &fi,
+            sizeof(FILE_STANDARD_INFORMATION),
+            FileStandardInformation);
+
+        if (!NT_SUCCESS(status))
+            break;
+
+        sz = (SIZE_T)fi.EndOfFile.LowPart;
+
+        Buffer = (PBYTE)supVirtualAlloc(
+            &sz,
+            DEFAULT_ALLOCATION_TYPE,
+            DEFAULT_PROTECT_TYPE,
+            &status);
+
+        if (NT_SUCCESS(status)) {
+
+            status = NtReadFile(
+                hFile,
+                NULL,
+                NULL,
+                NULL,
+                &iost,
+                Buffer,
+                fi.EndOfFile.LowPart,
+                NULL,
+                NULL);
+
+            if (NT_SUCCESS(status)) {
+                if (lpBufferSize)
+                    *lpBufferSize = fi.EndOfFile.LowPart;
+            }
+            else {
+                supVirtualFree(Buffer, NULL);
+                Buffer = NULL;
+            }
+        }
+
+    } while (FALSE);
+
+    if (hFile != NULL) {
+        NtClose(hFile);
+    }
+
+    return Buffer;
+}
+
+
+/*
+* supReadFileToBuffer_Cur
+*
+* Purpose:
+*
+* Read file to buffer. Release memory when it no longer needed.
+*
+*/
+PBYTE supReadFileToBuffer_Cur(
+    _In_ LPWSTR lpFileName,
+    _Inout_opt_ LPDWORD lpBufferSize
+)
+{
+    NTSTATUS    status;
     HANDLE      hFile = NULL, hRoot = NULL;
     PBYTE       Buffer = NULL;
     SIZE_T      sz = 0;
@@ -639,8 +744,7 @@ PBYTE supReadFileToBuffer(
             FILE_OPEN,
             FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
             NULL,
-            0
-        );
+            0);
 
         RtlFreeUnicodeString(&usName);
 
@@ -1197,6 +1301,34 @@ VOID ucmxBuildVersionString(
 *
 * Purpose:
 *
+* Output message to user by message id.
+*
+*/
+VOID ucmShowMessageById(
+    _In_ BOOL OutputToDebugger,
+    _In_ ULONG MessageId
+)
+{
+    PWCHAR pszMessage;
+    SIZE_T allocSize = PAGE_SIZE;
+
+    pszMessage = supVirtualAlloc(&allocSize,
+        DEFAULT_ALLOCATION_TYPE, 
+        DEFAULT_PROTECT_TYPE, NULL);
+    if (pszMessage) {
+
+        if (DecodeStringById(MessageId, pszMessage, PAGE_SIZE/sizeof(WCHAR))) {
+            ucmShowMessage(OutputToDebugger, pszMessage);
+        }
+        supSecureVirtualFree(pszMessage, PAGE_SIZE, NULL);
+    }
+}
+
+/*
+* ucmShowMessage
+*
+* Purpose:
+*
 * Output message to user.
 *
 */
@@ -1219,6 +1351,50 @@ VOID ucmShowMessage(
             szVersion,
             MB_ICONINFORMATION);
     }
+}
+
+/*
+* ucmShowQuestionById
+*
+* Purpose:
+*
+* Output message with question to user with given question id.
+*
+*/
+INT ucmShowQuestionById(
+    _In_ ULONG MessageId
+)
+{
+    INT iResult = IDNO;
+    WCHAR szVersion[100];
+
+    if (g_ctx->UserRequestsAutoApprove == TRUE)
+        return IDYES;
+
+    szVersion[0] = 0;
+    ucmxBuildVersionString(szVersion);
+
+
+    PWCHAR pszMessage;
+    SIZE_T allocSize = PAGE_SIZE;
+
+    pszMessage = supVirtualAlloc(&allocSize,
+        DEFAULT_ALLOCATION_TYPE,
+        DEFAULT_PROTECT_TYPE, NULL);
+    if (pszMessage) {
+
+        if (DecodeStringById(MessageId, pszMessage, PAGE_SIZE / sizeof(WCHAR))) {
+            
+            iResult = MessageBox(GetDesktopWindow(),
+                pszMessage,
+                szVersion,
+                MB_YESNO);
+
+        }
+        supSecureVirtualFree(pszMessage, PAGE_SIZE, NULL);
+    }
+
+    return iResult;
 }
 
 /*

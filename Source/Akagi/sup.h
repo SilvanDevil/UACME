@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.H
 *
-*  VERSION:     3.26
+*  VERSION:     3.27
 *
-*  DATE:        23 May 2020
+*  DATE:        10 Sep 2020
 *
 *  Common header file for the program support routines.
 *
@@ -130,6 +130,10 @@ PBYTE supReadFileToBuffer(
     _In_ LPWSTR lpFileName,
     _Inout_opt_ LPDWORD lpBufferSize);
 
+PBYTE supReadFileToBuffer_Cur(
+    _In_ LPWSTR lpFileName,
+    _Inout_opt_ LPDWORD lpBufferSize);
+
 BOOL supRunProcess2(
     _In_ LPWSTR lpszProcessName,
     _In_opt_ LPWSTR lpszParameters,
@@ -181,9 +185,16 @@ BOOLEAN supSetCheckSumForMappedFile(
     _In_ PVOID BaseAddress,
     _In_ ULONG CheckSum);
 
+VOID ucmShowMessageById(
+    _In_ BOOL OutputToDebugger,
+    _In_ ULONG MessageId);
+
 VOID ucmShowMessage(
     _In_ BOOL OutputToDebugger,
     _In_ LPWSTR lpszMsg);
+
+INT ucmShowQuestionById(
+    _In_ ULONG MessageId);
 
 INT ucmShowQuestion(
     _In_ LPWSTR lpszMsg);
