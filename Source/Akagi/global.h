@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        13 Sep 2020
 *
 *  Common header file for the program support routines.
 *
@@ -66,6 +66,12 @@
 #include <CommCtrl.h>
 #include <shlobj.h>
 #include <AccCtrl.h>
+
+#pragma warning(push)
+#pragma warning(disable: 4115) //named type definition in parentheses
+#include <fusion.h>
+#pragma warning(pop)
+
 #include "shared\ntos.h"
 #include "shared\minirtl.h"
 #include "shared\cmdline.h"
@@ -95,6 +101,13 @@ typedef struct _UACME_SHARED_CONTEXT {
     HANDLE hCompletionEvent;
 } UACME_SHARED_CONTEXT, *PUACME_SHARED_CONTEXT;
 
+typedef struct _UACME_FUSION_CONTEXT {
+    BOOL Initialized;
+    HINSTANCE hFusion;
+    pfnCreateAssemblyEnum CreateAssemblyEnum;
+    pfnCreateAssemblyCache CreateAssemblyCache;
+} UACME_FUSION_CONTEXT, * PUACME_FUSION_CONTEXT;
+
 typedef struct _UACME_CONTEXT {
     BOOLEAN                 IsWow64;
     BOOLEAN                 UserRequestsAutoApprove;
@@ -110,6 +123,7 @@ typedef struct _UACME_CONTEXT {
     HINSTANCE               hKernel32;
     HINSTANCE               hShell32;
     HINSTANCE               hMpClient;
+    UACME_FUSION_CONTEXT    FusionContext;
     UACME_SHARED_CONTEXT    SharedContext;
     UCM_METHOD_EXECUTE_TYPE MethodExecuteType;
     WCHAR                   szSystemRoot[MAX_PATH + 1]; //with end slash

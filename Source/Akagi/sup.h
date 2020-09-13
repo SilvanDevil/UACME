@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        13 Sep 2020
 *
 *  Common header file for the program support routines.
 *
@@ -94,6 +94,17 @@ typedef struct _REPARSE_DATA_BUFFER {
         } GenericReparseBuffer;
     } DUMMYUNIONNAME;
 } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+
+typedef HRESULT(WINAPI* pfnCreateAssemblyEnum)(
+    _Out_ IAssemblyEnum** pEnum,
+    _In_opt_  IUnknown* pUnkReserved,
+    _In_opt_  IAssemblyName* pName,
+    _In_  DWORD dwFlags,
+    _Reserved_  LPVOID pvReserved);
+
+typedef HRESULT(WINAPI* pfnCreateAssemblyCache)(
+    _Out_ IAssemblyCache** ppAsmCache,
+    _In_  DWORD            dwReserved);
 
 #define REPARSE_DATA_BUFFER_HEADER_LENGTH FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer)
 #define DEFAULT_ALLOCATION_TYPE MEM_COMMIT | MEM_RESERVE
@@ -358,6 +369,29 @@ BOOLEAN supIsNetfx48PlusInstalled(
 NTSTATUS supGetProcessDebugObject(
     _In_ HANDLE ProcessHandle,
     _Out_ PHANDLE DebugObjectHandle);
+
+BOOLEAN supInitFusion(
+    _In_ DWORD dwVersion);
+
+HRESULT supFusionGetAssemblyName(
+    _In_ IAssemblyName* pInterface,
+    _Inout_ LPWSTR* lpAssemblyName);
+
+HRESULT supFusionGetAssemblyPath(
+    _In_ IAssemblyCache* pInterface,
+    _In_ LPWSTR lpAssemblyName,
+    _Inout_ LPWSTR* lpAssemblyPath);
+
+BOOLEAN supFusionGetAssemblyPathByName(
+    _In_ LPWSTR lpAssemblyName,
+    _Inout_ LPWSTR* lpAssemblyPath);
+
+BOOL supIsProcessRunning(
+    _In_ LPWSTR ProcessName);
+
+BOOL supFusionGetImageMVID(
+    _In_ LPWSTR lpImageName,
+    _Out_ GUID* ModuleVersionId);
 
 #ifdef _DEBUG
 #define supDbgMsg(Message)  OutputDebugString(Message)

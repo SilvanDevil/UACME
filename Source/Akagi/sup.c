@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        13 Sep 2020
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -3232,7 +3232,6 @@ BOOLEAN supIsNetfx48PlusInstalled(
     return (dwReleaseVersion >= Netfx48ReleaseVersion);
 }
 
-
 /*
 * supGetProcessDebugObject
 *
@@ -3251,4 +3250,351 @@ NTSTATUS supGetProcessDebugObject(
         DebugObjectHandle,
         sizeof(HANDLE),
         NULL);
+}
+
+/*
+* supInitFusion
+*
+* Purpose:
+*
+* Load .NET Assembly Manager dll and remember function pointers.
+*
+*/
+BOOLEAN supInitFusion(
+    _In_ DWORD dwVersion
+)
+{
+    HMODULE hFusion;
+    pfnCreateAssemblyEnum CreateAssemblyEnum;
+    pfnCreateAssemblyCache CreateAssemblyCache;
+
+    WCHAR szBuffer[MAX_PATH * 2];
+
+    if (g_ctx->FusionContext.Initialized)
+        return TRUE;
+
+    if (dwVersion != 2 && dwVersion != 4)
+        return FALSE;
+
+    //
+    // Build path to assembly manager dll
+    //
+    _strcpy(szBuffer, g_ctx->szSystemRoot);
+    _strcat(szBuffer, MSNETFRAMEWORK_DIR);
+
+#ifdef _WIN64
+    _strcat(szBuffer, TEXT("64"));
+#endif
+
+    if (dwVersion == 2) {
+        _strcat(szBuffer, NET2_DIR);
+    }
+    else
+    {
+        _strcat(szBuffer, NET4_DIR);
+    }
+
+    _strcat(szBuffer, TEXT("fusion.dll"));
+
+    hFusion = LoadLibraryEx(szBuffer, NULL, 0);
+    if (hFusion == NULL)
+        return FALSE;
+
+    CreateAssemblyEnum = (pfnCreateAssemblyEnum)GetProcAddress(hFusion, "CreateAssemblyEnum");
+    CreateAssemblyCache = (pfnCreateAssemblyCache)GetProcAddress(hFusion, "CreateAssemblyCache");
+
+    if (CreateAssemblyEnum == NULL || CreateAssemblyCache == NULL) {
+        FreeLibrary(hFusion);
+        return FALSE;
+    }
+
+    g_ctx->FusionContext.hFusion = hFusion;
+    g_ctx->FusionContext.CreateAssemblyCache = CreateAssemblyCache;
+    g_ctx->FusionContext.CreateAssemblyEnum = CreateAssemblyEnum;
+    g_ctx->FusionContext.Initialized = TRUE;
+
+    return TRUE;
+}
+
+/*
+* supFusionGetAssemblyName
+*
+* Purpose:
+*
+* Return assembly name.
+*
+* Note: Use supHeapFree to release lpAssemblyName allocated memory.
+*
+*/
+HRESULT supFusionGetAssemblyName(
+    _In_ IAssemblyName* pInterface,
+    _Inout_ LPWSTR* lpAssemblyName
+)
+{
+    HRESULT hr = E_FAIL;
+    DWORD bufferSize = 0;
+    LPWSTR pwzName;
+
+    *lpAssemblyName = NULL;
+
+    pInterface->lpVtbl->GetName(pInterface, &bufferSize, 0);
+    if (bufferSize == 0)
+        return E_FAIL;
+
+    pwzName = (LPWSTR)supHeapAlloc(bufferSize * sizeof(WCHAR));
+    if (pwzName) {
+
+        hr = pInterface->lpVtbl->GetName(pInterface, &bufferSize, pwzName);
+        if (!SUCCEEDED(hr)) {
+            supHeapFree(pwzName);
+        }
+        else {
+            *lpAssemblyName = pwzName;
+        }
+
+    }
+
+    return hr;
+}
+
+/*
+* supFusionGetAssemblyPath
+*
+* Purpose:
+*
+* Return given assembly file path.
+*
+* Note: Use supHeapFree to release lpAssemblyPath allocated memory.
+*
+*/
+HRESULT supFusionGetAssemblyPath(
+    _In_ IAssemblyCache* pInterface,
+    _In_ LPWSTR lpAssemblyName,
+    _Inout_ LPWSTR* lpAssemblyPath
+)
+{
+    HRESULT hr = E_FAIL;
+    ASSEMBLY_INFO asmInfo;
+    LPWSTR assemblyPath;
+
+    *lpAssemblyPath = NULL;
+
+    RtlSecureZeroMemory(&asmInfo, sizeof(asmInfo));
+
+    pInterface->lpVtbl->QueryAssemblyInfo(pInterface,
+        QUERYASMINFO_FLAG_GETSIZE,
+        lpAssemblyName,
+        &asmInfo);
+
+    if (asmInfo.cchBuf == 0) //empty pszCurrentAssemblyPathBuf
+        return E_FAIL;
+
+    assemblyPath = (LPWSTR)supHeapAlloc(asmInfo.cchBuf * sizeof(WCHAR));
+    if (assemblyPath == NULL)
+        return E_FAIL;
+
+    asmInfo.pszCurrentAssemblyPathBuf = assemblyPath;
+
+    hr = pInterface->lpVtbl->QueryAssemblyInfo(pInterface,
+        QUERYASMINFO_FLAG_VALIDATE,
+        lpAssemblyName,
+        &asmInfo);
+
+    if (!SUCCEEDED(hr)) {
+        supHeapFree(asmInfo.pszCurrentAssemblyPathBuf);
+    }
+    else {
+        *lpAssemblyPath = assemblyPath;
+    }
+
+    return hr;
+}
+
+/*
+* supFusionGetAssemblyPathByName
+*
+* Purpose:
+*
+* Return given assembly file path.
+*
+* Note: Use supHeapFree to release lpAssemblyPath allocated memory.
+*
+*/
+BOOLEAN supFusionGetAssemblyPathByName(
+    _In_ LPWSTR lpAssemblyName,
+    _Inout_ LPWSTR* lpAssemblyPath
+)
+{
+    HRESULT hr;
+    IAssemblyCache* asmCache = NULL;
+
+    do {
+
+        hr = g_ctx->FusionContext.CreateAssemblyCache(&asmCache, 0);
+        if ((FAILED(hr)) || (asmCache == NULL))
+            break;
+
+        hr = supFusionGetAssemblyPath(asmCache,
+            lpAssemblyName,
+            lpAssemblyPath);
+
+        asmCache->lpVtbl->Release(asmCache);
+
+    } while (FALSE);
+
+    return SUCCEEDED(hr);
+}
+
+/*
+* supIsProcessRunning
+*
+* Purpose:
+*
+* Return TRUE if the given process is running in current session.
+*
+*/
+BOOL supIsProcessRunning(
+    _In_ LPWSTR ProcessName
+)
+{
+    BOOL bResult = FALSE;
+    ULONG nextEntryDelta = 0;
+    PVOID processList;
+
+    UNICODE_STRING lookupPsName;
+
+    union {
+        PSYSTEM_PROCESSES_INFORMATION Processes;
+        PBYTE ListRef;
+    } List;
+
+    processList = supGetSystemInfo(SystemProcessInformation);
+    if (processList == NULL)
+        return bResult;
+
+    List.ListRef = (PBYTE)processList;
+
+    RtlInitUnicodeString(&lookupPsName, ProcessName);
+
+    do {
+
+        List.ListRef += nextEntryDelta;
+
+        if (List.Processes->SessionId == NtCurrentPeb()->SessionId) {
+
+            if (RtlEqualUnicodeString(&lookupPsName,
+                &List.Processes->ImageName,
+                TRUE))
+            {
+                bResult = TRUE;
+                break;
+            }
+
+        }
+
+        nextEntryDelta = List.Processes->NextEntryDelta;
+
+    } while (nextEntryDelta);
+
+    if (processList) supHeapFree(processList);
+
+    return bResult;
+}
+
+typedef struct _CLIMETAHDR {
+    ULONG Signature;
+    USHORT MajorVersion;
+    USHORT MinorVersion;
+    ULONG Reserved;
+    ULONG VersionLength;
+    CHAR Version[ANYSIZE_ARRAY];
+} CLIMETAHDR, * PCLIMETAHDR;
+
+typedef struct _CLISTREAMROOT {
+    BYTE Flags;
+    BYTE Align0;
+    WORD Streams;
+} CLISTREAMROOT, * PCLISTREAMROOT;
+
+typedef struct _CLIMETASTREAM {
+    DWORD Offset;
+    DWORD Size;
+    CHAR Name[ANYSIZE_ARRAY];
+} CLIMETASTREAM, * PCLIMETASTREAM;
+
+/*
+* supFusionGetImageMVID
+*
+* Purpose:
+*
+* Query MVID value from image metadata.
+*
+*/
+BOOL supFusionGetImageMVID(
+    _In_ LPWSTR lpImageName,
+    _Out_ GUID* ModuleVersionId
+)
+{
+    BOOL bResult = FALSE;
+    HMODULE hModule;
+    PVOID baseAddress;
+    IMAGE_COR20_HEADER* cliHeader;
+    ULONG sz, offset;
+    IMAGE_NT_HEADERS* ntHeaders;
+
+    PBYTE streamData, streamPtr;
+
+    CLIMETAHDR* metaHeader;
+    CLISTREAMROOT* streamRoot;
+    CLIMETASTREAM* streamHeader;
+
+    SIZE_T nameLen;
+    WORD i = 0;
+    RPC_STATUS st;
+
+    st = UuidCreateNil(ModuleVersionId);
+    if (st != S_OK)
+        return FALSE;
+
+    hModule = LoadLibraryEx(lpImageName, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    if (hModule) {
+
+        baseAddress = (PBYTE)(((ULONG_PTR)hModule) & ~3);
+        ntHeaders = RtlImageNtHeader(baseAddress);
+
+        cliHeader = (IMAGE_COR20_HEADER*)RtlImageDirectoryEntryToData(baseAddress, TRUE,
+            IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR, &sz);
+
+        metaHeader = (CLIMETAHDR*)RtlOffsetToPointer(baseAddress, cliHeader->MetaData.VirtualAddress);
+        if (metaHeader->Signature != 'BJSB')
+            return FALSE;
+
+        offset = FIELD_OFFSET(CLIMETAHDR, Version) + metaHeader->VersionLength;
+        streamRoot = (CLISTREAMROOT*)RtlOffsetToPointer(metaHeader, offset);
+
+        streamPtr = (PBYTE)RtlOffsetToPointer(streamRoot, sizeof(CLISTREAMROOT));
+
+        do {
+            streamHeader = (CLIMETASTREAM*)streamPtr;
+            if (_strcmpi_a(streamHeader->Name, "#GUID") == 0) {
+                if (streamHeader->Size == sizeof(GUID)) {
+                    streamData = (PBYTE)RtlOffsetToPointer(metaHeader, streamHeader->Offset);
+                    RtlCopyMemory(ModuleVersionId, streamData, sizeof(GUID));
+                    bResult = TRUE;
+                }
+                break;
+            }
+
+
+            nameLen = _strlen_a(streamHeader->Name) + 1;
+            offset = ALIGN_UP(FIELD_OFFSET(CLIMETASTREAM, Name) + nameLen, ULONG);
+            streamPtr = (PBYTE)RtlOffsetToPointer(streamPtr, offset);
+            i++;
+
+        } while (i < streamRoot->Streams);
+
+        FreeLibrary(hModule);
+    }
+
+    return bResult;
 }

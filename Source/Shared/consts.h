@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        11 Sep 2020
 *
 *  Global consts definition file.
 *
@@ -121,7 +121,6 @@
 #define FUBUKI_DLL                      L"Fubuki.dll"
 #define FUJINAMI_DLL                    L"Fujinami.dll"
 #define HIBIKI_DLL                      L"Hibiki.dll"
-#define KUMA_DLL                        L"lzx32.dll"
 #define KAMIKAZE_MSC                    L"kmkze.msc"
 #define KAMIKAZE_LAUNCHER               L"readme.html"
 #define FUBUKI_EXE                      L"Fubuki.exe"
@@ -223,6 +222,10 @@
 #define SYSTEM32_DIR                L"\\system32\\"
 #define SYSWOW64_DIR                L"\\syswow64\\"
 #define WBEM_DIR                    L"wbem\\"
+
+#define NET2_DIR                    L"\\v2.0.50727\\"
+#define NET4_DIR                    L"\\v4.0.30319\\"
+#define MSNETFRAMEWORK_DIR          L"Microsoft.NET\\Framework"
 
 //
 // Chiyoda part

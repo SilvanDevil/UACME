@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        12 Sep 2020
 *
 *  Prototypes and definitions for UAC bypass methods table.
 *
@@ -82,7 +82,7 @@ typedef enum _UCM_METHOD {
     UacMethodGlupteba,          //+
     UacMethodShellChangePk,     //+
     UacMethodMsSettings2,       //+
-    UacMethodGACPoison,         //+
+    UacMethodNICPoison,         //+
     UacMethodMax,
     UacMethodInvalid = 0xabcdef
 } UCM_METHOD;

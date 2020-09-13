@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        10 Sep 2020
+*  DATE:        12 Sep 2020
 *
 *  Prototypes and definitions for hybrid methods.
 *
@@ -112,7 +112,7 @@ NTSTATUS ucmEgre55Method(
     _In_ PVOID ProxyDll,
     _In_ DWORD ProxyDllSize);
 
-NTSTATUS ucmGACPoisonMethod(
+NTSTATUS ucmNICPoisonMethod(
     _In_ PVOID ProxyDll,
     _In_ DWORD ProxyDllSize);
 
